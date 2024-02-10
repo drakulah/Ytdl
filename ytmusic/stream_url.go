@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -58,14 +59,25 @@ func GetAudioUrl(videoId string) (YouTubeInfo, error) {
 		return ytInfo, errors.New("invalid video id")
 	}
 
-	body := ContextAndroidYouTube(videoId)
-
-	res, err := http.Post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", "application/json", bytes.NewBufferString(body))
-	res.Header.Set("X-Goog-Api-Key", KEY_AND_VIDEO)
+	body, err := json.Marshal(ContextAndroidYouTubeMusic(videoId))
 
 	if err != nil {
 		return ytInfo, err
 	}
+
+	reqUrl := "https://music.youtube.com/youtubei/v1/player?key=" + KEY_AND_MUSIC + "&prettyPrint=false"
+
+	req, err := http.NewRequest("POST", reqUrl, bytes.NewBuffer(body))
+
+	if err != nil {
+		return ytInfo, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ytInfo, err
+	}
+
+	fmt.Println("[Fetch] Downloading API response")
 
 	defer res.Body.Close()
 	resBody, readErr := io.ReadAll(res.Body)
@@ -75,10 +87,13 @@ func GetAudioUrl(videoId string) (YouTubeInfo, error) {
 		return ytInfo, readErr
 	}
 
+	fmt.Println("[Parse] Parsing response as json")
+
 	if err := json.Unmarshal(resBody, &playerDetails); err != nil {
 		return ytInfo, err
 	}
 
+	fmt.Println("[Fetch] Choosing best audio format")
 	formats := playerDetails.StreamingData.AdaptiveFormats
 	audioMimeType, _ := regexp.Compile(`^audio/(webm|mp4);`)
 
